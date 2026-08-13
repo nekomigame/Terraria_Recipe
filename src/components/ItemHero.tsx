@@ -2,15 +2,23 @@ import React from 'react';
 import { Item, ModpackDataSet } from '../types/recipe';
 import { getRarityColor, getModColor } from '../utils/search';
 import { ItemIcon } from './ItemIcon';
-import { Info } from 'lucide-react';
+import { Info, Star } from 'lucide-react';
 
 interface ItemHeroProps {
   item: Item;
   dataset: ModpackDataSet;
   language: 'ja' | 'en';
+  isFavorite: boolean;
+  onToggleFavorite: (itemId: string) => void;
 }
 
-export const ItemHero: React.FC<ItemHeroProps> = ({ item, dataset, language }) => {
+export const ItemHero: React.FC<ItemHeroProps> = ({
+  item,
+  dataset,
+  language,
+  isFavorite,
+  onToggleFavorite
+}) => {
   const rarityColor = getRarityColor(item.rarity, item.rarityName);
   const modColor = getModColor(item.mod, dataset);
   const modInfo = dataset.mods.find(m => m.id === item.mod);
@@ -81,6 +89,24 @@ export const ItemHero: React.FC<ItemHeroProps> = ({ item, dataset, language }) =
           )}
         </div>
       </div>
+
+      {/* お気に入りピン留めボタン */}
+      <button
+        className="btn-secondary"
+        onClick={() => onToggleFavorite(item.id)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          padding: '8px 14px',
+          borderColor: isFavorite ? 'var(--accent-gold)' : 'var(--border-medium)',
+          color: isFavorite ? 'var(--accent-gold)' : 'var(--text-muted)'
+        }}
+        title={isFavorite ? 'ピン留め解除' : 'クラフト目標としてピン留め'}
+      >
+        <Star size={16} fill={isFavorite ? 'var(--accent-gold)' : 'none'} />
+        <span>{isFavorite ? (language === 'ja' ? 'ピン留め中' : 'Pinned') : (language === 'ja' ? '目標にピン留め' : 'Pin Goal')}</span>
+      </button>
     </div>
   );
 };

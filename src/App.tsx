@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Item, ModpackDataSet } from './types/recipe';
 import { initialSampleDataset } from './data/sampleDataset';
 import { buildCraftingTree, aggregateRawMaterials, findRecipesUsingItem } from './utils/craftingTree';
@@ -12,16 +12,36 @@ import { RawMaterialsBreakdown } from './components/RawMaterialsBreakdown';
 import { RecipeDetailsView } from './components/RecipeDetailsView';
 import { JsonImportModal } from './components/JsonImportModal';
 
-import { Hammer, GitFork, ListOrdered, Sparkles, Compass } from 'lucide-react';
+import { Hammer, GitFork, ListOrdered, Sparkles, Compass, Bookmark, BookmarkCheck } from 'lucide-react';
+
+const STORAGE_KEY_DATASET = 'terraria_recipe_dataset';
+const STORAGE_KEY_FAVORITES = 'terraria_recipe_favorites';
 
 export const App: React.FC = () => {
-  // データセット状態（ローカルストレージやインポートデータ）
-  const [dataset, setDataset] = useState<ModpackDataSet>(initialSampleDataset);
+  // データセット状態（ローカルストレージから復元）
+  const [dataset, setDataset] = useState<ModpackDataSet>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_DATASET);
+      return saved ? JSON.parse(saved) : initialSampleDataset;
+    } catch {
+      return initialSampleDataset;
+    }
+  });
+
+  // お気に入り / ピン留めアイテムIDリスト
+  const [favoriteIds, setFavoriteIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_FAVORITES);
+      return saved ? JSON.parse(saved) : ['FargowiltasSouls:EternitySoul', 'Terraria:Zenith'];
+    } catch {
+      return ['FargowiltasSouls:EternitySoul', 'Terraria:Zenith'];
+    }
+  });
 
   // 言語状態 (ja / en)
   const [language, setLanguage] = useState<'ja' | 'en'>('ja');
 
-  // 選択中アイテム (初期値はCross-ModのSoul of EternityまたはZenith)
+  // 選択中アイテム
   const [selectedItemId, setSelectedItemId] = useState<string>('FargowiltasSouls:EternitySoul');
 
   // アクティブタブ
@@ -38,6 +58,31 @@ export const App: React.FC = () => {
     isMaterialOnly: false,
     language: 'ja'
   });
+
+  // お気に入りの永続化
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_FAVORITES, JSON.stringify(favoriteIds));
+    } catch {
+      // ignore
+    }
+  }, [favoriteIds]);
+
+  // データセットの永続化
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_DATASET, JSON.stringify(dataset));
+    } catch {
+      // ignore
+    }
+  }, [dataset]);
+
+  // お気に入りトグル
+  const handleToggleFavorite = (itemId: string) => {
+    setFavoriteIds(prev =>
+      prev.includes(itemId) ? prev.filter(id => id !== itemId) : [...prev, itemId]
+    );
+  };
 
   // 言語切替時のフィルター同期
   const handleLanguageChange = (lang: 'ja' | 'en') => {
@@ -121,10 +166,63 @@ export const App: React.FC = () => {
 
         {/* 右ペイン: 選択アイテム詳細 & クラフト解析 */}
         <section className="content-workspace">
+          {/* ピン留めクイックアクセスバー */}
+          {favoriteIds.length > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '6px 20px',
+                background: 'hsl(220, 24%, 10%)',
+                borderBottom: '1px solid var(--border-subtle)',
+                overflowX: 'auto'
+              }}
+            >
+              <span style={{ fontSize: '0.75rem', color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Bookmark size={14} />
+                {language === 'ja' ? '目標ピン留め:' : 'Pinned:'}
+              </span>
+              {favoriteIds.map(fId => {
+                const fItem = dataset.items[fId];
+                if (!fItem) return null;
+                const isSelected = selectedItemId === fId;
+                return (
+                  <button
+                    key={fId}
+                    onClick={() => handleSelectItem(fItem)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '3px 8px',
+                      borderRadius: '4px',
+                      background: isSelected ? 'var(--bg-card-selected)' : 'var(--bg-card)',
+                      border: isSelected ? '1px solid var(--accent-gold)' : '1px solid var(--border-subtle)',
+                      color: isSelected ? '#fff' : 'var(--text-muted)',
+                      fontSize: '0.75rem',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    <BookmarkCheck size={12} color={isSelected ? 'var(--accent-gold)' : '#888'} />
+                    <span>{fItem.name[language] || fItem.name.en}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {selectedItem ? (
             <>
               {/* アイテム情報ヒーローヘッダー */}
-              <ItemHero item={selectedItem} dataset={dataset} language={language} />
+              <ItemHero
+                item={selectedItem}
+                dataset={dataset}
+                language={language}
+                isFavorite={favoriteIds.includes(selectedItem.id)}
+                onToggleFavorite={handleToggleFavorite}
+              />
 
               {/* タブナビゲーション */}
               <nav className="tabs-header-bar">
