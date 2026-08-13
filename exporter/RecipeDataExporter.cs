@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.IO.Compression;
+using System.Threading.Tasks;
 using Terraria;
 using Terraria.ID;
 using Terraria.ModLoader;
@@ -156,8 +158,24 @@ namespace RecipeDataExporter
             if (exportCurrentType >= exportTotalCount)
             {
                 IsExportingIcons = false;
-                Main.NewText($"[RecipeViewer] アイコン出力完了！ 保存先: {exportFolderPath} (合計 {exportSavedCount} 枚)", 50, 255, 130);
-                Main.NewText("[RecipeViewer] 出力されたPNG画像をWebビューアーのインポート画面にドラッグ＆ドロップしてください。", 100, 200, 255);
+                string zipPath = Path.Combine(Main.SavePath, "modpack_icons.zip");
+
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        if (File.Exists(zipPath)) File.Delete(zipPath);
+                        ZipFile.CreateFromDirectory(exportFolderPath, zipPath, CompressionLevel.Fastest, false);
+                        Main.NewText($"[RecipeViewer] ZIP圧縮完了: {zipPath}", 50, 255, 130);
+                        Main.NewText("[RecipeViewer] Webビューアーの「ZIPファイルを選択」から modpack_icons.zip を指定するだけで一瞬で登録できます！", 100, 200, 255);
+                    }
+                    catch (Exception ex)
+                    {
+                        Main.NewText($"[RecipeViewer] ZIP圧縮中にエラー: {ex.Message} (フォルダ選択から読み込めます)", 255, 200, 50);
+                    }
+                });
+
+                Main.NewText($"[RecipeViewer] アイコン出力完了！ (合計 {exportSavedCount} 枚) ZIP圧縮中...", 50, 255, 130);
             }
         }
 
