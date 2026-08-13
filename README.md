@@ -56,6 +56,9 @@ Webビューアーをローカルで起動・開発する場合の手順です�
 - [Node.js](https://nodejs.org/) (v18以上推奨)
 - npm
 
+Node.jsがインストールされていない場合は[Node.jsインストールガイド](./docs/install_nodejs.md)を参照してください。
+
+
 ### 手順
 
 ```bash
