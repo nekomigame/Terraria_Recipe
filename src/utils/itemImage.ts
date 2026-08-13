@@ -16,7 +16,6 @@ export function getFastCdnImageUrl(item?: Item | null): string | null {
 
   // 2. バニラ Terraria アイテム (jsDelivr / GitHub 高速 CDN)
   if (item.mod === 'Terraria' || item.id.startsWith('Terraria:')) {
-    // jsDelivr の高速 CDN
     return `https://cdn.jsdelivr.net/gh/Terraria-Wiki/assets@master/items/${cleanInternal}.png`;
   }
 
@@ -29,32 +28,63 @@ export function getFastCdnImageUrl(item?: Item | null): string | null {
 }
 
 /**
- * ファイル名からアイテムIDを推定・正規化する
- * 例: "Terraria_TerraBlade.png" -> "Terraria:TerraBlade"
- * 例: "TerraBlade.png" -> "Terraria:TerraBlade"
- * 例: "CalamityMod_AuricBar.png" -> "CalamityMod:AuricBar"
+ * ファイル名高速ルックアップ用のハッシュマップ構造体
  */
-export function matchItemIdFromFilename(filename: string, knownItemIds: string[]): string | null {
+export interface ItemIdLookup {
+  exactSet: Set<string>;
+  baseNameMap: Map<string, string>; // "terramod_blade" -> "TerraMod:Blade", "terrablade" -> "Terraria:TerraBlade"
+}
+
+export function createItemIdLookup(knownItemIds: string[]): ItemIdLookup {
+  const exactSet = new Set<string>(knownItemIds);
+  const baseNameMap = new Map<string, string>();
+
+  for (const id of knownItemIds) {
+    // 例: "Terraria:TerraBlade" -> "terraria_terrablade", "terrablade"
+    const lowerId = id.toLowerCase();
+    const underscoreId = lowerId.replace(':', '_');
+    baseNameMap.set(underscoreId, id);
+
+    const colonIdx = id.indexOf(':');
+    if (colonIdx !== -1) {
+      const namePart = id.substring(colonIdx + 1).toLowerCase();
+      if (!baseNameMap.has(namePart)) {
+        baseNameMap.set(namePart, id);
+      }
+    }
+  }
+
+  return { exactSet, baseNameMap };
+}
+
+/**
+ * O(1) 高速ファイル名判定
+ */
+export function matchItemIdFromFilenameFast(filename: string, lookup: ItemIdLookup): string | null {
   const baseName = filename.replace(/\.(png|jpg|jpeg|webp)$/i, '');
 
-  // 1. 完全一致 (例: "Terraria:TerraBlade")
-  if (knownItemIds.includes(baseName)) {
+  // 1. 完全一致
+  if (lookup.exactSet.has(baseName)) {
     return baseName;
   }
 
-  // 2. アンダースコア区切り (例: "Terraria_TerraBlade" -> "Terraria:TerraBlade")
-  const colonName = baseName.replace('_', ':');
-  if (knownItemIds.includes(colonName)) {
-    return colonName;
+  const lowerBase = baseName.toLowerCase();
+
+  // 2. ハッシュマップから O(1) 検索
+  const mapped = lookup.baseNameMap.get(lowerBase);
+  if (mapped) return mapped;
+
+  // 3. アンダースコア -> コロン
+  const colonCandidate = baseName.replace('_', ':');
+  if (lookup.exactSet.has(colonCandidate)) {
+    return colonCandidate;
   }
 
-  // 3. 内部名のみ (例: "TerraBlade" -> "Terraria:TerraBlade")
+  // 4. バニラ候補
   const vanillaCandidate = `Terraria:${baseName}`;
-  if (knownItemIds.includes(vanillaCandidate)) {
+  if (lookup.exactSet.has(vanillaCandidate)) {
     return vanillaCandidate;
   }
 
-  // 4. 登録アイテム一覧から末尾一致を検索
-  const match = knownItemIds.find(id => id.endsWith(`:${baseName}`) || id.toLowerCase() === baseName.toLowerCase());
-  return match || null;
+  return null;
 }
