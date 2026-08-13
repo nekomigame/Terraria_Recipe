@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { ModpackDataSet } from '../types/recipe';
-import { X, Upload, CheckCircle2, AlertCircle, FileCode, RotateCcw } from 'lucide-react';
-import { initialSampleDataset } from '../data/sampleDataset';
+import { X, Upload, CheckCircle2, AlertCircle, FileCode } from 'lucide-react';
 
 interface JsonImportModalProps {
   isOpen: boolean;
@@ -85,11 +84,6 @@ export const JsonImportModal: React.FC<JsonImportModalProps> = ({
       };
       reader.readAsText(file);
     }
-  };
-
-  const handleResetSample = () => {
-    onImport(initialSampleDataset);
-    onClose();
   };
 
   return (
@@ -180,26 +174,17 @@ export const JsonImportModal: React.FC<JsonImportModalProps> = ({
             </div>
           )}
 
-          {/* フッターアクション（プリセット初期化） */}
+          {/* フッターアクション */}
           <div
             style={{
               display: 'flex',
-              justifyContent: 'space-between',
+              justifyContent: 'flex-end',
               alignItems: 'center',
               marginTop: '10px',
               paddingTop: '12px',
               borderTop: '1px solid var(--border-subtle)'
             }}
           >
-            <button
-              className="btn-secondary"
-              onClick={handleResetSample}
-              style={{ fontSize: '0.8rem' }}
-            >
-              <RotateCcw size={14} />
-              <span>{language === 'ja' ? 'Cross-Modサンプルデータに戻す' : 'Reset to Sample Data'}</span>
-            </button>
-
             <button className="btn-secondary" onClick={onClose} style={{ fontSize: '0.8rem' }}>
               {language === 'ja' ? '閉じる' : 'Close'}
             </button>

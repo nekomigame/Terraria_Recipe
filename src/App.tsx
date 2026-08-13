@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Item, ModpackDataSet } from './types/recipe';
-import { initialSampleDataset } from './data/sampleDataset';
+import { emptyDataset } from './data/emptyDataset';
 import { buildCraftingTree, aggregateRawMaterials, findRecipesUsingItem } from './utils/craftingTree';
 import { filterItems, FilterOptions } from './utils/search';
 
@@ -12,7 +12,7 @@ import { RawMaterialsBreakdown } from './components/RawMaterialsBreakdown';
 import { RecipeDetailsView } from './components/RecipeDetailsView';
 import { JsonImportModal } from './components/JsonImportModal';
 
-import { Hammer, GitFork, ListOrdered, Sparkles, Compass, Bookmark, BookmarkCheck } from 'lucide-react';
+import { Hammer, GitFork, ListOrdered, Sparkles, Compass, Bookmark, BookmarkCheck, Upload, FileCode } from 'lucide-react';
 
 const STORAGE_KEY_DATASET = 'terraria_recipe_dataset';
 const STORAGE_KEY_FAVORITES = 'terraria_recipe_favorites';
@@ -22,9 +22,9 @@ export const App: React.FC = () => {
   const [dataset, setDataset] = useState<ModpackDataSet>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_DATASET);
-      return saved ? JSON.parse(saved) : initialSampleDataset;
+      return saved ? JSON.parse(saved) : emptyDataset;
     } catch {
-      return initialSampleDataset;
+      return emptyDataset;
     }
   });
 
@@ -32,9 +32,9 @@ export const App: React.FC = () => {
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_FAVORITES);
-      return saved ? JSON.parse(saved) : ['FargowiltasSouls:EternitySoul', 'Terraria:Zenith'];
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return ['FargowiltasSouls:EternitySoul', 'Terraria:Zenith'];
+      return [];
     }
   });
 
@@ -42,7 +42,7 @@ export const App: React.FC = () => {
   const [language, setLanguage] = useState<'ja' | 'en'>('ja');
 
   // 選択中アイテム
-  const [selectedItemId, setSelectedItemId] = useState<string>('FargowiltasSouls:EternitySoul');
+  const [selectedItemId, setSelectedItemId] = useState<string>('');
 
   // アクティブタブ
   const [activeTab, setActiveTab] = useState<'tree' | 'rawMaterials' | 'howTo' | 'usedIn'>('tree');
@@ -305,6 +305,26 @@ export const App: React.FC = () => {
                 )}
               </div>
             </>
+          ) : Object.keys(dataset.items).length === 0 ? (
+            <div style={{ padding: '80px 20px', textAlign: 'center', maxWidth: '500px', margin: '0 auto' }}>
+              <FileCode size={48} color="var(--accent-gold)" style={{ margin: '0 auto 16px', opacity: 0.8 }} />
+              <h2 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: '10px', color: '#fff' }}>
+                {language === 'ja' ? 'MODデータが読み込まれていません' : 'No MOD Data Loaded'}
+              </h2>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '24px' }}>
+                {language === 'ja'
+                  ? 'tModLoaderのRecipe Exporter MODから出力された modpack_data.json を読み込むことで、お使いの環境の全MODレシピ・クラフトツリーが表示されます。'
+                  : 'Import modpack_data.json exported from tModLoader to view crafting trees and recipes for your mods.'}
+              </p>
+              <button
+                className="btn-primary"
+                onClick={() => setIsImportModalOpen(true)}
+                style={{ padding: '10px 24px', fontSize: '0.9rem', margin: '0 auto' }}
+              >
+                <Upload size={18} />
+                <span>{language === 'ja' ? 'MODデータ（JSON）をインポート' : 'Import MOD Data (JSON)'}</span>
+              </button>
+            </div>
           ) : (
             <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
               <Sparkles size={36} color="var(--accent-gold)" style={{ margin: '0 auto 16px' }} />
