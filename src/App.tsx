@@ -17,25 +17,30 @@ import { WelcomeView } from './components/WelcomeView';
 
 import { Hammer, GitFork, ListOrdered, Sparkles, Compass, Bookmark, BookmarkCheck, UploadCloud, Loader2 } from 'lucide-react';
 
-const STORAGE_KEY_DATASET = 'terraria_recipe_dataset';
+import { getSavedDataset, saveDatasetToDB, clearDatasetFromDB } from './utils/datasetStorage';
+
 const STORAGE_KEY_FAVORITES = 'terraria_recipe_favorites';
 
 export const App: React.FC = () => {
-  // データセット状態（ローカルストレージから復元）
-  const [dataset, setDataset] = useState<ModpackDataSet>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_DATASET);
-      if (!saved) return emptyDataset;
-      const parsed = JSON.parse(saved);
-      // 有効なアイテムが存在する場合のみ利用
-      if (parsed && parsed.items && Object.keys(parsed.items).length > 0) {
-        return parsed;
+  // データセット状態
+  const [dataset, setDataset] = useState<ModpackDataSet>(emptyDataset);
+  const [isInitializing, setIsInitializing] = useState<boolean>(true);
+
+  // 起動時にデータベース（IndexedDB）から前回のMODレシピデータを自動復元
+  useEffect(() => {
+    getSavedDataset().then(saved => {
+      if (saved && saved.items && Object.keys(saved.items).length > 0) {
+        setDataset(saved);
+        const firstItem = Object.values(saved.items)[0];
+        if (firstItem) {
+          setSelectedItemId(firstItem.id);
+        }
       }
-      return emptyDataset;
-    } catch {
-      return emptyDataset;
-    }
-  });
+      setIsInitializing(false);
+    }).catch(() => {
+      setIsInitializing(false);
+    });
+  }, []);
 
   // お気に入り / ピン留めアイテムIDリスト
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => {
@@ -92,19 +97,6 @@ export const App: React.FC = () => {
       // ignore
     }
   }, [favoriteIds]);
-
-  // データセットの永続化
-  useEffect(() => {
-    try {
-      if (isDatasetLoaded) {
-        localStorage.setItem(STORAGE_KEY_DATASET, JSON.stringify(dataset));
-      } else {
-        localStorage.removeItem(STORAGE_KEY_DATASET);
-      }
-    } catch {
-      // ignore (QuotaExceededErrorなど)
-    }
-  }, [dataset, isDatasetLoaded]);
 
   // レシピ切り替えハンドラー
   const handleSelectRecipe = (itemId: string, recipeId: string) => {
@@ -286,22 +278,23 @@ export const App: React.FC = () => {
     setFilters(prev => ({ ...prev, ...newFilters }));
   };
 
-  // データインポートハンドラー
+  // データインポートハンドラー（データベースに自動永続化）
   const handleImportDataset = (newDataset: ModpackDataSet) => {
     setDataset(newDataset);
+    saveDatasetToDB(newDataset);
     const firstItem = Object.values(newDataset.items)[0];
     if (firstItem) {
       setSelectedItemId(firstItem.id);
     }
   };
 
-  // データリセットハンドラー（初期状態に戻す）
+  // データリセットハンドラー（初期状態に戻す & データベースクリア）
   const handleResetDataset = () => {
     setDataset(emptyDataset);
     setSelectedItemId('');
     setFavoriteIds([]);
+    clearDatasetFromDB();
     try {
-      localStorage.removeItem(STORAGE_KEY_DATASET);
       localStorage.removeItem(STORAGE_KEY_FAVORITES);
     } catch {
       // ignore
@@ -373,7 +366,12 @@ export const App: React.FC = () => {
       />
 
       {/* 初回起動時（MODデータ未読み込み時）: 専用ウェルカム画面を表示 */}
-      {!isDatasetLoaded ? (
+      {isInitializing ? (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', color: 'var(--text-muted)' }}>
+          <Loader2 size={40} color="var(--accent-gold)" className="animate-spin" />
+          <p>{language === 'ja' ? '保存済みレシピデータを読み込み中...' : 'Loading saved recipe database...'}</p>
+        </div>
+      ) : !isDatasetLoaded ? (
         <WelcomeView
           language={language}
           onImport={handleImportDataset}
