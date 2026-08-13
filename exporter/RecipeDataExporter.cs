@@ -58,19 +58,26 @@ namespace RecipeDataExporter
             }
 
             // 2. レシピグループの収集
+            // RecipeGroup.recipeGroupIDs は Dictionary<string, int> なので、IDからグループ名を逆引きするマッピングを作成
+            var idToGroupName = RecipeGroup.recipeGroupIDs.ToDictionary(kv => kv.Value, kv => kv.Key);
+
             foreach (var kvp in RecipeGroup.recipeGroups)
             {
+                int groupId = kvp.Key;
                 var group = kvp.Value;
+                string groupName = idToGroupName.TryGetValue(groupId, out var name) ? name : $"Group_{groupId}";
+                string displayName = group.GetText != null ? group.GetText() : groupName;
+
                 var validIds = new List<string>();
                 foreach (int itemId in group.ValidItems)
                 {
                     validIds.Add(GetFullItemId(itemId));
                 }
 
-                dataset.recipeGroups[group.Name] = new RecipeGroupEntry
+                dataset.recipeGroups[groupName] = new RecipeGroupEntry
                 {
-                    id = group.Name,
-                    name = new LocalizedTextEntry { en = group.Name, ja = group.Name },
+                    id = groupName,
+                    name = new LocalizedTextEntry { en = displayName, ja = displayName },
                     defaultItemId = GetFullItemId(group.IconicItemId),
                     validItemIds = validIds
                 };
@@ -110,7 +117,7 @@ namespace RecipeDataExporter
                         {
                             if (RecipeGroup.recipeGroups.TryGetValue(gIdx, out var rg) && rg.ValidItems.Contains(ing.type))
                             {
-                                matchedGroupId = rg.Name;
+                                matchedGroupId = idToGroupName.TryGetValue(gIdx, out var gName) ? gName : $"Group_{gIdx}";
                                 break;
                             }
                         }
