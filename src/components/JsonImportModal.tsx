@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { ModpackDataSet } from '../types/recipe';
-import { X, Upload, CheckCircle2, AlertCircle, FileCode } from 'lucide-react';
+import { normalizeModpackData } from '../utils/importer';
+import { X, Upload, CheckCircle2, AlertCircle, FileCode, Loader2 } from 'lucide-react';
 
 interface JsonImportModalProps {
   isOpen: boolean;
@@ -15,74 +16,102 @@ export const JsonImportModal: React.FC<JsonImportModalProps> = ({
   onImport,
   language
 }) => {
-  const [dragActive, setDragActive] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragCounter = useRef(0);
 
   if (!isOpen) return null;
 
-  const processJson = (jsonString: string) => {
-    try {
-      const data = JSON.parse(jsonString) as ModpackDataSet;
-      if (!data.items || !data.recipes) {
-        throw new Error(
-          language === 'ja'
-            ? '有効なModpackデータ形式ではありません（items または recipes が見つかりません）'
-            : 'Invalid modpack format (missing items or recipes)'
-        );
-      }
-      setErrorMsg(null);
-      setSuccessMsg(
-        language === 'ja'
-          ? `インポート成功！ MOD: ${data.mods?.length || 0}個 / アイテム: ${Object.keys(data.items).length}個 / レシピ: ${data.recipes.length}個`
-          : `Imported successfully! Mods: ${data.mods?.length || 0} / Items: ${Object.keys(data.items).length} / Recipes: ${data.recipes.length}`
-      );
-      setTimeout(() => {
-        onImport(data);
-        onClose();
-      }, 700);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setErrorMsg(msg);
-      setSuccessMsg(null);
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleFileProcess = (file: File) => {
     if (!file) return;
+    setIsLoading(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
 
     const reader = new FileReader();
-    reader.onload = event => {
-      const text = event.target?.result as string;
-      processJson(text);
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string;
+        if (!text) {
+          throw new Error(language === 'ja' ? 'ファイルが空です' : 'File is empty');
+        }
+        const json = JSON.parse(text);
+        const normalized = normalizeModpackData(json);
+        const itemCount = Object.keys(normalized.items).length;
+        const recipeCount = normalized.recipes.length;
+
+        setSuccessMsg(
+          language === 'ja'
+            ? `インポート成功！ MOD: ${normalized.mods.length}個 / アイテム: ${itemCount}個 / レシピ: ${recipeCount}個`
+            : `Imported successfully! Mods: ${normalized.mods.length} / Items: ${itemCount} / Recipes: ${recipeCount}`
+        );
+
+        setTimeout(() => {
+          onImport(normalized);
+          setIsLoading(false);
+          onClose();
+        }, 500);
+      } catch (err: any) {
+        setIsLoading(false);
+        setErrorMsg(err.message || (language === 'ja' ? 'JSONの解析に失敗しました' : 'Failed to parse JSON'));
+      }
     };
+
+    reader.onerror = () => {
+      setIsLoading(false);
+      setErrorMsg(language === 'ja' ? 'ファイルの読み込み中にエラーが発生しました' : 'Error reading file');
+    };
+
     reader.readAsText(file);
   };
 
-  const handleDrag = (e: React.DragEvent) => {
+  const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
+    dragCounter.current += 1;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    if (!isDragging) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current -= 1;
+    if (dragCounter.current <= 0) {
+      setIsDragging(false);
+      dragCounter.current = 0;
     }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setDragActive(false);
+    setIsDragging(false);
+    dragCounter.current = 0;
 
-    const file = e.dataTransfer.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = event => {
-        const text = event.target?.result as string;
-        processJson(text);
-      };
-      reader.readAsText(file);
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      handleFileProcess(files[0]);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      handleFileProcess(files[0]);
     }
   };
 
@@ -112,27 +141,47 @@ export const JsonImportModal: React.FC<JsonImportModalProps> = ({
           </p>
 
           {/* ドロップゾーン */}
-          <label
-            className={`dropzone-area ${dragActive ? 'drag-active' : ''}`}
-            onDragEnter={handleDrag}
-            onDragLeave={handleDrag}
-            onDragOver={handleDrag}
+          <div
+            className={`dropzone-area ${isDragging ? 'drag-active' : ''}`}
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
             onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            style={{ cursor: isLoading ? 'wait' : 'pointer' }}
           >
-            <Upload size={36} color="var(--accent-gold)" style={{ margin: '0 auto 12px' }} />
-            <div style={{ fontWeight: 600, marginBottom: '4px' }}>
-              {language === 'ja' ? 'JSONファイルをここにドラッグ＆ドロップ' : 'Drag & drop JSON file here'}
-            </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-              {language === 'ja' ? 'またはクリックしてファイルを選択' : 'or click to browse from computer'}
-            </div>
             <input
+              ref={fileInputRef}
               type="file"
-              accept=".json"
+              accept=".json,application/json"
               style={{ display: 'none' }}
-              onChange={handleFileChange}
+              onChange={handleInputChange}
             />
-          </label>
+
+            {isLoading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                <Loader2 size={32} color="var(--accent-gold)" className="animate-spin" />
+                <div style={{ fontWeight: 600 }}>
+                  {language === 'ja' ? 'MODデータを解析中...' : 'Processing JSON...'}
+                </div>
+              </div>
+            ) : successMsg ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                <CheckCircle2 size={32} color="#4caf50" />
+                <div style={{ color: '#aaffaa', fontWeight: 600 }}>{successMsg}</div>
+              </div>
+            ) : (
+              <>
+                <Upload size={36} color="var(--accent-gold)" style={{ margin: '0 auto 12px' }} />
+                <div style={{ fontWeight: 600, marginBottom: '4px' }}>
+                  {language === 'ja' ? 'JSONファイルをここにドラッグ＆ドロップ' : 'Drag & drop JSON file here'}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                  {language === 'ja' ? 'またはクリックしてファイルを選択' : 'or click to browse from computer'}
+                </div>
+              </>
+            )}
+          </div>
 
           {/* エラーメッセージ */}
           {errorMsg && (
@@ -149,28 +198,8 @@ export const JsonImportModal: React.FC<JsonImportModalProps> = ({
                 color: '#ff9999'
               }}
             >
-              <AlertCircle size={16} />
+              <AlertCircle size={16} style={{ flexShrink: 0 }} />
               <span>{errorMsg}</span>
-            </div>
-          )}
-
-          {/* 成功メッセージ */}
-          {successMsg && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 14px',
-                background: 'hsla(120, 50%, 20%, 0.4)',
-                border: '1px solid #4caf50',
-                borderRadius: '6px',
-                fontSize: '0.8rem',
-                color: '#aaffaa'
-              }}
-            >
-              <CheckCircle2 size={16} />
-              <span>{successMsg}</span>
             </div>
           )}
 

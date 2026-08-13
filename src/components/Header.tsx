@@ -1,23 +1,26 @@
 import React from 'react';
 import { ModpackDataSet } from '../types/recipe';
-import { Sparkles, Upload, Globe, Database } from 'lucide-react';
+import { Sparkles, Upload, Globe, Database, Trash2 } from 'lucide-react';
 
 interface HeaderProps {
   dataset: ModpackDataSet;
   language: 'ja' | 'en';
   onLanguageChange: (lang: 'ja' | 'en') => void;
   onOpenImportModal: () => void;
+  onResetDataset?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   dataset,
   language,
   onLanguageChange,
-  onOpenImportModal
+  onOpenImportModal,
+  onResetDataset
 }) => {
   const totalItems = Object.keys(dataset.items).length;
   const totalRecipes = dataset.recipes.length;
   const totalMods = dataset.mods.length;
+  const isLoaded = totalItems > 0;
 
   return (
     <header className="app-header">
@@ -44,9 +47,13 @@ export const Header: React.FC<HeaderProps> = ({
             border: '1px solid var(--border-subtle)'
           }}
         >
-          <Database size={14} color="var(--accent-cyan)" />
+          <Database size={14} color={isLoaded ? 'var(--accent-cyan)' : 'var(--text-dim)'} />
           <span>
-            {totalMods} MODs | {totalItems} Items | {totalRecipes} Recipes
+            {isLoaded
+              ? `${totalMods} MODs | ${totalItems} Items | ${totalRecipes} Recipes`
+              : language === 'ja'
+              ? 'MODデータ未読み込み'
+              : 'No MOD Data Loaded'}
           </span>
         </div>
 
@@ -59,6 +66,19 @@ export const Header: React.FC<HeaderProps> = ({
           <Globe size={15} />
           <span>{language === 'ja' ? '日本語' : 'English'}</span>
         </button>
+
+        {/* データリセットボタン（データ読み込み時のみ表示） */}
+        {isLoaded && onResetDataset && (
+          <button
+            className="btn-secondary"
+            onClick={onResetDataset}
+            title={language === 'ja' ? '読み込んだデータをクリアして初期状態に戻す' : 'Clear loaded data'}
+            style={{ color: 'var(--accent-crimson)' }}
+          >
+            <Trash2 size={15} />
+            <span>{language === 'ja' ? 'データクリア' : 'Clear Data'}</span>
+          </button>
+        )}
 
         {/* ユーザー環境JSONインポートボタン */}
         <button
