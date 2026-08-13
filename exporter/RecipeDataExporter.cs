@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading.Tasks;
 using Terraria;
 using Terraria.ID;
 using Terraria.ModLoader;
@@ -25,6 +24,14 @@ namespace RecipeDataExporter
     /// </summary>
     public class ExporterSystem : ModSystem
     {
+        // アイコン非同期安全エクスポート用の状態管理
+        public static bool IsExportingIcons { get; private set; } = false;
+        private static int exportCurrentType = 1;
+        private static int exportTotalCount = 0;
+        private static int exportSavedCount = 0;
+        private static string exportFolderPath = "";
+        private static int lastReportedProgress = 0;
+
         public override void PostAddRecipes()
         {
             try
@@ -34,6 +41,123 @@ namespace RecipeDataExporter
             catch (Exception ex)
             {
                 Mod.Logger.Error("RecipeDataExporter エクスポート中にエラーが発生しました: " + ex.ToString());
+            }
+        }
+
+        public static void StartExportIcons()
+        {
+            if (IsExportingIcons)
+            {
+                Main.NewText("[RecipeViewer] すでにアイコン出力が実行中です...", 255, 200, 50);
+                return;
+            }
+
+            exportFolderPath = Path.Combine(Main.SavePath, "RecipeViewer_Icons");
+            if (!Directory.Exists(exportFolderPath))
+            {
+                Directory.CreateDirectory(exportFolderPath);
+            }
+
+            exportCurrentType = 1;
+            exportTotalCount = ItemLoader.ItemCount;
+            exportSavedCount = 0;
+            lastReportedProgress = 0;
+            IsExportingIcons = true;
+
+            Main.NewText($"[RecipeViewer] 全 {exportTotalCount} 種類のアイコン出力を開始しました（メインスレッド安全処理）...", 255, 230, 80);
+        }
+
+        /// <summary>
+        /// メインスレッド（ゲーム更新ループ）内で1フレームあたり数十個ずつ安全にテクスチャを抽出・保存
+        /// （※GPU競合による破損を完全に防止し、ゲームのFPSも維持）
+        /// </summary>
+        public override void PostUpdateEverything()
+        {
+            if (!IsExportingIcons) return;
+
+            // 1フレームあたり処理するアイテム数（カクつきなく高速に処理）
+            int batchSize = 100;
+            int processedThisFrame = 0;
+
+            while (processedThisFrame < batchSize && exportCurrentType < exportTotalCount)
+            {
+                int type = exportCurrentType;
+                exportCurrentType++;
+                processedThisFrame++;
+
+                try
+                {
+                    Main.instance.LoadItem(type);
+                    var texture = TextureAssets.Item[type]?.Value;
+                    if (texture != null && texture.Width > 0 && texture.Height > 0)
+                    {
+                        string fileName;
+                        if (type < ItemID.Count)
+                        {
+                            fileName = "Terraria_" + ItemID.Search.GetName(type) + ".png";
+                        }
+                        else
+                        {
+                            var modItem = ItemLoader.GetItem(type);
+                            fileName = (modItem != null ? $"{modItem.Mod.Name}_{modItem.Name}" : $"Unknown_{type}") + ".png";
+                        }
+
+                        string filePath = Path.Combine(exportFolderPath, fileName);
+
+                        // アニメーションスプライト（縦長画像）の場合は1フレーム目のみを切り抜く
+                        int frameCount = 1;
+                        if (Main.itemAnimations[type] != null && Main.itemAnimations[type].FrameCount > 1)
+                        {
+                            frameCount = Main.itemAnimations[type].FrameCount;
+                        }
+                        int frameHeight = texture.Height / frameCount;
+
+                        if (frameCount == 1)
+                        {
+                            // 単一フレームの場合は直接安全に書き出し
+                            using (var fs = File.Create(filePath))
+                            {
+                                texture.SaveAsPng(fs, texture.Width, texture.Height);
+                            }
+                        }
+                        else
+                        {
+                            // 複数フレームの場合は1フレーム目の領域を切り抜いて書き出し
+                            using (var cropped = new Texture2D(Main.graphics.GraphicsDevice, texture.Width, frameHeight))
+                            {
+                                Color[] rawData = new Color[texture.Width * frameHeight];
+                                texture.GetData(0, new Rectangle(0, 0, texture.Width, frameHeight), rawData, 0, rawData.Length);
+                                cropped.SetData(rawData);
+                                using (var fs = File.Create(filePath))
+                                {
+                                    cropped.SaveAsPng(fs, texture.Width, frameHeight);
+                                }
+                            }
+                        }
+
+                        exportSavedCount++;
+                    }
+                }
+                catch
+                {
+                    // 個別アイテムの抽出失敗時はスキップ
+                }
+            }
+
+            // 進捗レポート
+            int progressPercent = (int)((float)exportCurrentType / exportTotalCount * 100);
+            if (progressPercent >= lastReportedProgress + 25 && progressPercent < 100)
+            {
+                lastReportedProgress = progressPercent;
+                Main.NewText($"[RecipeViewer] アイコン出力中: {progressPercent}% ({exportSavedCount} 枚完了)...", 200, 200, 200);
+            }
+
+            // 出力完了
+            if (exportCurrentType >= exportTotalCount)
+            {
+                IsExportingIcons = false;
+                Main.NewText($"[RecipeViewer] アイコン出力完了！ 保存先: {exportFolderPath} (合計 {exportSavedCount} 枚)", 50, 255, 130);
+                Main.NewText("[RecipeViewer] 出力されたPNG画像をWebビューアーのインポート画面にドラッグ＆ドロップしてください。", 100, 200, 255);
             }
         }
 
@@ -269,75 +393,17 @@ namespace RecipeDataExporter
 
     /// <summary>
     /// ゲーム内チャットコマンド: /exporticons
-    /// バックグラウンドで非同期に全MODアイテムのテクスチャ画像をPNG出力する
+    /// 安全に全アイテムのテクスチャ画像をPNG出力する
     /// </summary>
     public class ExportIconsCommand : ModCommand
     {
         public override CommandType Type => CommandType.Chat;
         public override string Command => "exporticons";
-        public override string Description => "全アイテムのテクスチャ画像を非同期でRecipeViewer_Iconsフォルダに出力します";
+        public override string Description => "全アイテムのテクスチャ画像を破損なく安全にRecipeViewer_Iconsフォルダに出力します";
 
         public override void Action(CommandCaller caller, string input, string[] args)
         {
-            caller.Reply("[RecipeViewer] アイコン画像のバックグラウンド出力を開始しました...", Color.Yellow);
-
-            Task.Run(() =>
-            {
-                try
-                {
-                    string folderPath = Path.Combine(Main.SavePath, "RecipeViewer_Icons");
-                    if (!Directory.Exists(folderPath))
-                    {
-                        Directory.CreateDirectory(folderPath);
-                    }
-
-                    int totalCount = ItemLoader.ItemCount;
-                    int savedCount = 0;
-
-                    for (int type = 1; type < totalCount; type++)
-                    {
-                        try
-                        {
-                            Main.instance.LoadItem(type);
-                            var texture = TextureAssets.Item[type]?.Value;
-                            if (texture != null && texture.Width > 0 && texture.Height > 0)
-                            {
-                                string fileName;
-                                if (type < ItemID.Count)
-                                {
-                                    fileName = "Terraria_" + ItemID.Search.GetName(type) + ".png";
-                                }
-                                else
-                                {
-                                    var modItem = ItemLoader.GetItem(type);
-                                    fileName = (modItem != null ? $"{modItem.Mod.Name}_{modItem.Name}" : $"Unknown_{type}") + ".png";
-                                }
-
-                                string filePath = Path.Combine(folderPath, fileName);
-                                if (!File.Exists(filePath))
-                                {
-                                    using (var fs = File.Create(filePath))
-                                    {
-                                        texture.SaveAsPng(fs, texture.Width, texture.Height);
-                                    }
-                                }
-                                savedCount++;
-                            }
-                        }
-                        catch
-                        {
-                            // ignore
-                        }
-                    }
-
-                    Main.NewText($"[RecipeViewer] アイコン出力完了！ 保存先: {folderPath} (合計 {savedCount} 枚)", 50, 255, 130);
-                    Main.NewText("[RecipeViewer] 出力された画像をWebビューアーのインポート画面にドラッグ＆ドロップしてください。", 100, 200, 255);
-                }
-                catch (Exception ex)
-                {
-                    Main.NewText($"[RecipeViewer] アイコン出力中にエラー: {ex.Message}", 255, 50, 50);
-                }
-            });
+            ExporterSystem.StartExportIcons();
         }
     }
 
