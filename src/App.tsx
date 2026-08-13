@@ -4,6 +4,7 @@ import { emptyDataset } from './data/emptyDataset';
 import { buildCraftingTree, aggregateRawMaterials, findRecipesUsingItem } from './utils/craftingTree';
 import { filterItems, FilterOptions } from './utils/search';
 import { normalizeModpackData } from './utils/importer';
+import { importImageFiles } from './utils/imageImporter';
 
 import { Header } from './components/Header';
 import { ItemList } from './components/ItemList';
@@ -158,8 +159,10 @@ export const App: React.FC = () => {
 
       const files = e.dataTransfer?.files;
       if (files && files.length > 0) {
-        const file = files[0];
-        if (file.name.endsWith('.json') || file.type === 'application/json' || file.type === '') {
+        const jsonFile = Array.from(files).find(f => f.name.endsWith('.json'));
+        const imageFiles = Array.from(files).filter(f => /\.(png|jpg|jpeg|webp)$/i.test(f.name));
+
+        if (jsonFile) {
           setIsGlobalLoading(true);
           const reader = new FileReader();
           reader.onload = (event) => {
@@ -181,7 +184,24 @@ export const App: React.FC = () => {
             setIsGlobalLoading(false);
             alert(language === 'ja' ? 'ファイルの読み込みに失敗しました' : 'Failed to read file');
           };
-          reader.readAsText(file);
+          reader.readAsText(jsonFile);
+        } else if (imageFiles.length > 0) {
+          setIsGlobalLoading(true);
+          const knownIds = Object.keys(dataset.items);
+          importImageFiles(imageFiles, knownIds)
+            .then(res => {
+              setIsGlobalLoading(false);
+              alert(
+                language === 'ja'
+                  ? `画像インポート完了: ${res.successCount} 件のアイコンを登録しました`
+                  : `Imported ${res.successCount} item icons successfully`
+              );
+              // レンダリング強制更新
+              setDataset({ ...dataset });
+            })
+            .catch(() => {
+              setIsGlobalLoading(false);
+            });
         }
       }
     };
@@ -526,11 +546,12 @@ export const App: React.FC = () => {
         </main>
       )}
 
-      {/* JSONインポートモーダル */}
+      {/* JSON & 画像インポートモーダル */}
       <JsonImportModal
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         onImport={handleImportDataset}
+        dataset={dataset}
         language={language}
       />
     </div>

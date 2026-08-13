@@ -4,9 +4,14 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.Tasks;
 using Terraria;
 using Terraria.ID;
 using Terraria.ModLoader;
+using Terraria.GameContent;
+using Terraria.Localization;
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 
 namespace RecipeDataExporter
 {
@@ -16,6 +21,7 @@ namespace RecipeDataExporter
 
     /// <summary>
     /// 全MODロード完了後（PostAddRecipes）に全アイテム・レシピ・作業台・レシピグループをJSON出力するシステム
+    /// （※起動速度最優先のため、メタデータのみを0.1秒で高速出力）
     /// </summary>
     public class ExporterSystem : ModSystem
     {
@@ -27,7 +33,7 @@ namespace RecipeDataExporter
             }
             catch (Exception ex)
             {
-                Mod.Logger.Error("RecipeDataExporter エクスポート中にエラーが発生しました: " + ex.Message);
+                Mod.Logger.Error("RecipeDataExporter エクスポート中にエラーが発生しました: " + ex.ToString());
             }
         }
 
@@ -58,8 +64,14 @@ namespace RecipeDataExporter
             }
 
             // 2. レシピグループの収集
-            // RecipeGroup.recipeGroupIDs は Dictionary<string, int> なので、IDからグループ名を逆引きするマッピングを作成
-            var idToGroupName = RecipeGroup.recipeGroupIDs.ToDictionary(kv => kv.Value, kv => kv.Key);
+            var idToGroupName = new Dictionary<int, string>();
+            if (RecipeGroup.recipeGroupIDs != null)
+            {
+                foreach (var kv in RecipeGroup.recipeGroupIDs)
+                {
+                    idToGroupName[kv.Value] = kv.Key;
+                }
+            }
 
             foreach (var kvp in RecipeGroup.recipeGroups)
             {
@@ -69,9 +81,12 @@ namespace RecipeDataExporter
                 string displayName = group.GetText != null ? group.GetText() : groupName;
 
                 var validIds = new List<string>();
-                foreach (int itemId in group.ValidItems)
+                if (group.ValidItems != null)
                 {
-                    validIds.Add(GetFullItemId(itemId));
+                    foreach (int itemId in group.ValidItems)
+                    {
+                        validIds.Add(GetFullItemId(itemId));
+                    }
                 }
 
                 dataset.recipeGroups[groupName] = new RecipeGroupEntry
@@ -82,6 +97,9 @@ namespace RecipeDataExporter
                     validItemIds = validIds
                 };
             }
+
+            // 作業台タイルの追跡用
+            var recordedTiles = new HashSet<int>();
 
             // 3. レシピ一覧の収集
             for (int i = 0; i < Recipe.numRecipes; i++)
@@ -105,30 +123,33 @@ namespace RecipeDataExporter
                 };
 
                 // 素材の収集
-                foreach (var ing in r.requiredItem)
+                if (r.requiredItem != null)
                 {
-                    if (ing == null || ing.type == ItemID.None) continue;
-
-                    // レシピグループ判定
-                    string matchedGroupId = null;
-                    if (r.acceptedGroups != null)
+                    foreach (var ing in r.requiredItem)
                     {
-                        foreach (int gIdx in r.acceptedGroups)
+                        if (ing == null || ing.type == ItemID.None) continue;
+
+                        // レシピグループ判定
+                        string matchedGroupId = null;
+                        if (r.acceptedGroups != null)
                         {
-                            if (RecipeGroup.recipeGroups.TryGetValue(gIdx, out var rg) && rg.ValidItems.Contains(ing.type))
+                            foreach (int gIdx in r.acceptedGroups)
                             {
-                                matchedGroupId = idToGroupName.TryGetValue(gIdx, out var gName) ? gName : $"Group_{gIdx}";
-                                break;
+                                if (RecipeGroup.recipeGroups.TryGetValue(gIdx, out var rg) && rg.ValidItems.Contains(ing.type))
+                                {
+                                    matchedGroupId = idToGroupName.TryGetValue(gIdx, out var gName) ? gName : $"Group_{gIdx}";
+                                    break;
+                                }
                             }
                         }
-                    }
 
-                    recipeEntry.ingredients.Add(new IngredientEntry
-                    {
-                        itemId = matchedGroupId == null ? GetFullItemId(ing.type) : null,
-                        recipeGroupId = matchedGroupId,
-                        stack = ing.stack
-                    });
+                        recipeEntry.ingredients.Add(new IngredientEntry
+                        {
+                            itemId = matchedGroupId == null ? GetFullItemId(ing.type) : null,
+                            recipeGroupId = matchedGroupId,
+                            stack = ing.stack > 0 ? ing.stack : 1
+                        });
+                    }
                 }
 
                 // 作業台タイルの収集
@@ -138,7 +159,21 @@ namespace RecipeDataExporter
                     {
                         if (tileId >= 0)
                         {
-                            recipeEntry.requiredTiles.Add(GetFullTileId(tileId));
+                            string tileFullId = GetFullTileId(tileId);
+                            recipeEntry.requiredTiles.Add(tileFullId);
+                            recordedTiles.Add(tileId);
+                        }
+                    }
+                }
+
+                // 作成条件の収集 (tModLoader 1.4 Conditions)
+                if (r.Conditions != null)
+                {
+                    foreach (var cond in r.Conditions)
+                    {
+                        if (cond != null && cond.Description != null)
+                        {
+                            recipeEntry.requiredConditions.Add(cond.Description.Value);
                         }
                     }
                 }
@@ -146,7 +181,22 @@ namespace RecipeDataExporter
                 dataset.recipes.Add(recipeEntry);
             }
 
-            // 4. 全アイテム情報の収集
+            // 作業台情報の収集
+            foreach (int tileId in recordedTiles)
+            {
+                string tileFullId = GetFullTileId(tileId);
+                string tileName = GetTileDisplayName(tileId);
+                string modName = tileId < TileID.Count ? "Terraria" : (TileLoader.GetTile(tileId)?.Mod.Name ?? "Terraria");
+
+                dataset.stations[tileFullId] = new StationEntry
+                {
+                    id = tileFullId,
+                    name = new LocalizedTextEntry { en = tileName, ja = tileName },
+                    mod = modName
+                };
+            }
+
+            // 4. 全アイテム情報の収集（高速メタデータ抽出）
             for (int type = 1; type < ItemLoader.ItemCount; type++)
             {
                 Item testItem = new Item();
@@ -155,6 +205,7 @@ namespace RecipeDataExporter
 
                 string fullId = GetFullItemId(type);
                 string modName = testItem.ModItem != null ? testItem.ModItem.Mod.Name : "Terraria";
+                string itemName = testItem.Name;
 
                 dataset.items[fullId] = new ItemEntry
                 {
@@ -164,8 +215,8 @@ namespace RecipeDataExporter
                     modDisplayName = testItem.ModItem?.Mod.DisplayName ?? "Terraria (Vanilla)",
                     name = new LocalizedTextEntry
                     {
-                        en = Lang.GetItemNameValue(type),
-                        ja = Lang.GetItemNameValue(type)
+                        en = itemName,
+                        ja = itemName
                     },
                     rarity = testItem.rare,
                     maxStack = testItem.maxStack,
@@ -179,10 +230,11 @@ namespace RecipeDataExporter
             string json = JsonSerializer.Serialize(dataset, options);
             File.WriteAllText(savePath, json);
 
-            Main.NewText($"[RecipeViewer] 全MODレシピデータ出力完了: {savePath}", 50, 255, 130);
+            // ロガーへ出力
+            ModContent.GetInstance<RecipeDataExporterMod>()?.Logger.Info($"[RecipeViewer] 全MODレシピデータ出力完了: {savePath} (Items: {dataset.items.Count}, Recipes: {dataset.recipes.Count})");
         }
 
-        private static string GetFullItemId(int type)
+        public static string GetFullItemId(int type)
         {
             if (type < ItemID.Count)
             {
@@ -192,7 +244,7 @@ namespace RecipeDataExporter
             return modItem != null ? $"{modItem.Mod.Name}:{modItem.Name}" : $"Unknown:{type}";
         }
 
-        private static string GetFullTileId(int tileType)
+        public static string GetFullTileId(int tileType)
         {
             if (tileType < TileID.Count)
             {
@@ -200,6 +252,92 @@ namespace RecipeDataExporter
             }
             var modTile = TileLoader.GetTile(tileType);
             return modTile != null ? $"{modTile.Mod.Name}:{modTile.Name}" : $"Tile:{tileType}";
+        }
+
+        public static string GetTileDisplayName(int tileType)
+        {
+            if (tileType < TileID.Count)
+            {
+                string searchName = TileID.Search.GetName(tileType);
+                if (string.IsNullOrEmpty(searchName)) return $"Tile #{tileType}";
+                return searchName.Replace("Tile_", "").Replace("Benches", " Bench");
+            }
+            var modTile = TileLoader.GetTile(tileType);
+            return modTile != null ? modTile.Name : $"Tile #{tileType}";
+        }
+    }
+
+    /// <summary>
+    /// ゲーム内チャットコマンド: /exporticons
+    /// バックグラウンドで非同期に全MODアイテムのテクスチャ画像をPNG出力する
+    /// </summary>
+    public class ExportIconsCommand : ModCommand
+    {
+        public override CommandType Type => CommandType.Chat;
+        public override string Command => "exporticons";
+        public override string Description => "全アイテムのテクスチャ画像を非同期でRecipeViewer_Iconsフォルダに出力します";
+
+        public override void Action(CommandCaller caller, string input, string[] args)
+        {
+            caller.Reply("[RecipeViewer] アイコン画像のバックグラウンド出力を開始しました...", Color.Yellow);
+
+            Task.Run(() =>
+            {
+                try
+                {
+                    string folderPath = Path.Combine(Main.SavePath, "RecipeViewer_Icons");
+                    if (!Directory.Exists(folderPath))
+                    {
+                        Directory.CreateDirectory(folderPath);
+                    }
+
+                    int totalCount = ItemLoader.ItemCount;
+                    int savedCount = 0;
+
+                    for (int type = 1; type < totalCount; type++)
+                    {
+                        try
+                        {
+                            Main.instance.LoadItem(type);
+                            var texture = TextureAssets.Item[type]?.Value;
+                            if (texture != null && texture.Width > 0 && texture.Height > 0)
+                            {
+                                string fileName;
+                                if (type < ItemID.Count)
+                                {
+                                    fileName = "Terraria_" + ItemID.Search.GetName(type) + ".png";
+                                }
+                                else
+                                {
+                                    var modItem = ItemLoader.GetItem(type);
+                                    fileName = (modItem != null ? $"{modItem.Mod.Name}_{modItem.Name}" : $"Unknown_{type}") + ".png";
+                                }
+
+                                string filePath = Path.Combine(folderPath, fileName);
+                                if (!File.Exists(filePath))
+                                {
+                                    using (var fs = File.Create(filePath))
+                                    {
+                                        texture.SaveAsPng(fs, texture.Width, texture.Height);
+                                    }
+                                }
+                                savedCount++;
+                            }
+                        }
+                        catch
+                        {
+                            // ignore
+                        }
+                    }
+
+                    Main.NewText($"[RecipeViewer] アイコン出力完了！ 保存先: {folderPath} (合計 {savedCount} 枚)", 50, 255, 130);
+                    Main.NewText("[RecipeViewer] 出力された画像をWebビューアーのインポート画面にドラッグ＆ドロップしてください。", 100, 200, 255);
+                }
+                catch (Exception ex)
+                {
+                    Main.NewText($"[RecipeViewer] アイコン出力中にエラー: {ex.Message}", 255, 50, 50);
+                }
+            });
         }
     }
 
@@ -229,6 +367,7 @@ namespace RecipeDataExporter
         public int rarity { get; set; }
         public int maxStack { get; set; }
         public bool isMaterial { get; set; }
+        public string icon { get; set; }
     }
     public class IngredientEntry { public string itemId { get; set; } public string recipeGroupId { get; set; } public int stack { get; set; } }
     public class ResultEntry { public string itemId { get; set; } public int stack { get; set; } }
