@@ -16,7 +16,7 @@
    ![dotnet_list-sdks.png](.\picture\dotnet_list-sdks.png)  
    ここで.NETのバージョンが8になっていることとファイルパスがProgram Filesになっていることを確認してください。  
    もしProgram Files(x86)になっている場合は32bitバージョンがインストールされているので、32bit版をアンインストールして64bit版を選んで再度インストールしなおしてください。
-3. エクスポートMODの導入
+3. エクスポートMODの導入  
    ここまでできたらtModLoaderを起動しMODのビルドを行ってください。
    手順はエクスポートMODの導入とデータの出力と読み込みに書いてあります。
 
