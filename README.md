@@ -1,7 +1,9 @@
 # Terraria & tModLoader 全MOD対応レシピビューアー (Terraria Recipe Viewer)
 
-『Terraria』および『tModLoader』環境における、バニラおよび導入されている**すべてのMOD・拡張アドオンMOD（Calamity, Thorium, Fargo's Souls, DLCなど）**のレシピ・多段クラフトツリー・末端総素材数を瞬時に逆引き・可視化できるWebアプリケーション＆データエクスポートツールです。
+『Terraria』および『tModLoader』環境における、バニラおよび導入されているすべてのMOD・拡張アドオンMOD（Calamity, Thorium, Fargo's Souls, DLCなど）のレシピ・多段クラフトツリー・末端総素材数を瞬時に逆引き・可視化できるWebアプリケーション＆データエクスポートツールです。
 
+> [!WARNING]
+> このツールはAntigravity CLIを使用して作成されています。
 ---
 
 ## 🌟 主な特徴
