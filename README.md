@@ -107,6 +107,6 @@ npm run build
 
 ## 📜 ライセンス
 
-本プロジェクトは [MIT License](file:///C:/Users/nekom/Desktop/program/Terraria_Recipe/LICENSE) の下で公開されています。
+本プロジェクトは [MIT License](./LICENSE) の下で公開されています。
 
 ※ 『Terraria』および『tModLoader』の著作権・商標は Re-Logic および tModLoader チームに帰属します。
