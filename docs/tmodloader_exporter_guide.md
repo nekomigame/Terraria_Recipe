@@ -13,7 +13,7 @@
    dotnet --list-sdks
    ```
    コマンドを実行し正しくインストールできている場合以下の画像のようになります。  
-   ![dotnet_list-sdks.png](.\picture\dotnet_list-sdks.png)  
+   ![dotnet_list-sdks.png](./picture/dotnet_list-sdks.png)  
    ここで.NETのバージョンが8になっていることとファイルパスがProgram Filesになっていることを確認してください。  
    もしProgram Files(x86)になっている場合は32bitバージョンがインストールされているので、32bit版をアンインストールして64bit版を選んで再度インストールしなおしてください。
 3. エクスポートMODの導入  
