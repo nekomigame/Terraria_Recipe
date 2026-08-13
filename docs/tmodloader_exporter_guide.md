@@ -36,7 +36,7 @@
       version = 1.0.0
       ```
    4. **ゲーム内でビルド＆有効化**:
-      - tModLoaderを起動し、「Mod Sources（Mod開発）」画面から「Recipe Data Exporter」をビルドして有効化（Enable）します。
+      - tModLoaderを起動し、「Workshop」>「Develop Mods（Mod開発）」画面から「Recipe Data Exporter」をビルドして有効化（Enable）します。
       - Mod Sources（Mod開発）に移動したときにすでに.NETをインストールしているのにも関わらず.NETをインストールしてくださいと表示された場合はtModLoaderの再起動もしくはPCの再起動を行ってください。
 
 ### データの出力と読み込み

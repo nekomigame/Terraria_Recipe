@@ -33,6 +33,8 @@
    - ワールドロード時またはMOD読み込み完了時、自動的に以下の場所に `modpack_data.json` が生成されます：
      - 保存先: `Documents\My Games\Terraria\tModLoader\modpack_data.json`
 
+詳細は[tmodloader_exporter_guide.md](./docs/tmodloader_exporter_guide.md)を参照してください。
+
 ---
 
 ### 2. Webビューアーで閲覧する
