@@ -70,6 +70,7 @@ export interface CraftingTreeNode {
   requiredAmount: number;
   depth: number;
   recipe?: Recipe;
+  availableRecipes?: Recipe[]; // 選択可能な代替レシピ一覧
   children: CraftingTreeNode[];
   isRawMaterial: boolean;  // これ以上クラフトできない末端素材（鉱石やドロップ品）
   isRecipeGroup?: boolean;

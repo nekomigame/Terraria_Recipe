@@ -52,6 +52,12 @@ export const App: React.FC = () => {
   // 選択中アイテムID（初期状態は空）
   const [selectedItemId, setSelectedItemId] = useState<string>('');
 
+  // アイテムごとの選択中レシピIDマップ（代替レシピ切り替え用）
+  const [selectedRecipeIds, setSelectedRecipeIds] = useState<Record<string, string>>({});
+
+  // レシピグループごとの選択中アイテムIDマップ
+  const [selectedGroupVariants, setSelectedGroupVariants] = useState<Record<string, string>>({});
+
   // アクティブタブ
   const [activeTab, setActiveTab] = useState<'tree' | 'rawMaterials' | 'howTo' | 'usedIn'>('tree');
 
@@ -98,6 +104,22 @@ export const App: React.FC = () => {
       // ignore (QuotaExceededErrorなど)
     }
   }, [dataset, isDatasetLoaded]);
+
+  // レシピ切り替えハンドラー
+  const handleSelectRecipe = (itemId: string, recipeId: string) => {
+    setSelectedRecipeIds(prev => ({
+      ...prev,
+      [itemId]: recipeId
+    }));
+  };
+
+  // レシピグループバリアント切り替えハンドラー
+  const handleSelectGroupVariant = (groupId: string, variantItemId: string) => {
+    setSelectedGroupVariants(prev => ({
+      ...prev,
+      [groupId]: variantItemId
+    }));
+  };
 
   // ウィンドウ全体のドラッグ＆ドロップイベントリスナー（ブラウザの別窓ファイルオープン防止＆全画面ドロップ受付）
   useEffect(() => {
@@ -205,8 +227,17 @@ export const App: React.FC = () => {
   // 選択中アイテムのクラフトツリー（DAG）
   const craftingTree = useMemo(() => {
     if (!selectedItem) return null;
-    return buildCraftingTree(selectedItem.id, 1, dataset);
-  }, [selectedItem, dataset]);
+    return buildCraftingTree(
+      selectedItem.id,
+      1,
+      dataset,
+      new Set(),
+      0,
+      15,
+      selectedRecipeIds,
+      selectedGroupVariants
+    );
+  }, [selectedItem, dataset, selectedRecipeIds, selectedGroupVariants]);
 
   // 選択中アイテムの末端基本素材（Raw Materials）集計
   const rawMaterials = useMemo(() => {
@@ -455,7 +486,11 @@ export const App: React.FC = () => {
                       rootNode={craftingTree}
                       dataset={dataset}
                       language={language}
+                      selectedRecipeIds={selectedRecipeIds}
+                      selectedGroupVariants={selectedGroupVariants}
                       onSelectItem={handleSelectItem}
+                      onSelectRecipe={handleSelectRecipe}
+                      onSelectGroupVariant={handleSelectGroupVariant}
                     />
                   )}
 
