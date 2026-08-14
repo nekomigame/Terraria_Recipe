@@ -23,8 +23,10 @@
 
 ## 🚀 使い方・導入手順
 
+詳細な導入手順は[tmodloader_exporter_guide.md](./docs/tmodloader_exporter_guide.md)を参照してください。  
+
 ### 1. tModLoader からレシピ＆画像をエクスポートする
-.NET SDKのインストール方法は[install_dotnet.md](./docs/install_dotnet.md)を参照してください。  
+.NET SDKのインストール方法は[tmodloader_exporter_guide.mdの事前準備](./docs/tmodloader_exporter_guide.md)を参照してください。  
 .NET SDKのインストール後に以下の手順を行ってください。  
 
 1. **MODソースフォルダの準備**:
